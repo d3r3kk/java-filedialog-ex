@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Minimal token permissions — this workflow only reads code and uploads artifacts.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & Test (Java ${{ matrix.java-version }})
+    # Ubuntu runner is headless-safe for the smoke test (--help exits before any AWT call).
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java-version: [11, 17, 21, 25]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: temurin
+          cache: maven
+
+      - name: Build with Maven
+        run: mvn -B package
+
+      - name: Lint with Checkstyle
+        run: mvn -B checkstyle:check
+
+      - name: Smoke test (headless — --help exits before any AWT call)
+        run: >
+          java -jar
+          target/java-filedialog-ex-1.0-SNAPSHOT-jar-with-dependencies.jar
+          --help
+
+      # Upload the JAR once (from the Java 21 LTS build).
+      # The same JAR runs on all supported JVM versions and architectures
+      # because it targets Java 11 bytecode.
+      - name: Upload artifact
+        if: matrix.java-version == 21
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-filedialog-ex
+          path: target/java-filedialog-ex-1.0-SNAPSHOT-jar-with-dependencies.jar
+          if-no-files-found: error
